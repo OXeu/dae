@@ -13,6 +13,7 @@ import (
 type DnsRequestOutboundIndex int16
 
 const (
+	DnsRequestOutboundIndex_Rewrite     DnsRequestOutboundIndex = 0xFB
 	DnsRequestOutboundIndex_Reject      DnsRequestOutboundIndex = 0xFC
 	DnsRequestOutboundIndex_AsIs        DnsRequestOutboundIndex = 0xFD
 	DnsRequestOutboundIndex_LogicalOr   DnsRequestOutboundIndex = 0xFE

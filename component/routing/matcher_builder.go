@@ -120,7 +120,8 @@ func ParseOutbound(rawOutbound *config_parser.Function) (outbound *Outbound, err
 			if p.Val == "must" {
 				outbound.Must = true
 			} else {
-				return nil, fmt.Errorf("unknown outbound param: %v", p.Val)
+				//return nil, fmt.Errorf("unknown outbound param: %v", p.Val)
+				outbound.Name = rawOutbound.Name + "(" + p.Val + ")"
 			}
 		default:
 			return nil, fmt.Errorf("unknown outbound param key: %v", p.Key)

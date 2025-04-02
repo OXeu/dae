@@ -7,6 +7,7 @@ package dns
 
 import (
 	"fmt"
+	"net"
 	"net/netip"
 	"net/url"
 	"sync"
@@ -151,26 +152,27 @@ func (s *Dns) InitUpstreams() {
 	wg.Wait()
 }
 
-func (s *Dns) RequestSelect(qname string, qtype uint16) (upstreamIndex consts.DnsRequestOutboundIndex, upstream *Upstream, err error) {
+func (s *Dns) RequestSelect(qname string, qtype uint16) (upstreamIndex consts.DnsRequestOutboundIndex, rewrite *net.IP, upstream *Upstream, err error) {
 	// Route.
-	upstreamIndex, err = s.reqMatcher.Match(qname, qtype)
+	upstreamIndex, rewrite, err = s.reqMatcher.Match(qname, qtype)
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, nil, err
 	}
 	// nil indicates AsIs.
 	if upstreamIndex == consts.DnsRequestOutboundIndex_AsIs ||
-		upstreamIndex == consts.DnsRequestOutboundIndex_Reject {
-		return upstreamIndex, nil, nil
+		upstreamIndex == consts.DnsRequestOutboundIndex_Reject ||
+		upstreamIndex == consts.DnsRequestOutboundIndex_Rewrite {
+		return upstreamIndex, rewrite, nil, nil
 	}
 	if int(upstreamIndex) >= len(s.upstream) {
-		return 0, nil, fmt.Errorf("bad upstream index: %v not in [0, %v]", upstreamIndex, len(s.upstream)-1)
+		return 0, nil, nil, fmt.Errorf("bad upstream index: %v not in [0, %v]", upstreamIndex, len(s.upstream)-1)
 	}
 	// Get corresponding upstream.
 	upstream, err = s.upstream[upstreamIndex].GetUpstream()
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, nil, err
 	}
-	return upstreamIndex, upstream, nil
+	return upstreamIndex, nil, upstream, nil
 }
 
 func (s *Dns) ResponseSelect(msg *dnsmessage.Msg, fromUpstream *Upstream) (upstreamIndex consts.DnsResponseOutboundIndex, upstream *Upstream, err error) {

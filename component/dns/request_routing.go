@@ -7,7 +7,9 @@ package dns
 
 import (
 	"fmt"
+	"net"
 	"strconv"
+	"strings"
 
 	"github.com/daeuniverse/dae/common/consts"
 	"github.com/daeuniverse/dae/component/routing"
@@ -41,7 +43,13 @@ func NewRequestMatcherBuilder(log *logrus.Logger, rules []*config_parser.Routing
 	return b, nil
 }
 
-func (b *RequestMatcherBuilder) upstreamToId(upstream string) (upstreamId consts.DnsRequestOutboundIndex, err error) {
+func (b *RequestMatcherBuilder) upstreamToId(upstream string) (upstreamId consts.DnsRequestOutboundIndex, rewrite net.IP, err error) {
+	if strings.HasPrefix(upstream, "rewrite(") && strings.HasSuffix(upstream, ")") {
+		trimPrefix := strings.TrimPrefix(upstream, "rewrite(")
+		rewriteString := strings.TrimSuffix(trimPrefix, ")")
+		rewrite = net.ParseIP(rewriteString)
+		return consts.DnsRequestOutboundIndex_Rewrite, rewrite, nil
+	}
 	switch upstream {
 	case consts.DnsRequestOutboundIndex_Reject.String():
 		upstreamId = consts.DnsRequestOutboundIndex_Reject
@@ -54,11 +62,11 @@ func (b *RequestMatcherBuilder) upstreamToId(upstream string) (upstreamId consts
 	default:
 		_upstreamId, ok := b.upstreamName2Id[upstream]
 		if !ok {
-			return 0, fmt.Errorf("upstream %v not found; please define it in section \"dns.upstream\"", strconv.Quote(upstream))
+			return 0, nil, fmt.Errorf("upstream %v not found; please define it in section \"dns.upstream\"", strconv.Quote(upstream))
 		}
 		upstreamId = consts.DnsRequestOutboundIndex(_upstreamId)
 	}
-	return upstreamId, nil
+	return upstreamId, nil, nil
 }
 
 func (b *RequestMatcherBuilder) addQName(f *config_parser.Function, key string, values []string, upstream *routing.Outbound) (err error) {
@@ -75,7 +83,7 @@ func (b *RequestMatcherBuilder) addQName(f *config_parser.Function, key string, 
 		RuleIndex: len(b.rules),
 		Domains:   values,
 	})
-	upstreamId, err := b.upstreamToId(upstream.Name)
+	upstreamId, rewrite, err := b.upstreamToId(upstream.Name)
 	if err != nil {
 		return err
 	}
@@ -83,6 +91,7 @@ func (b *RequestMatcherBuilder) addQName(f *config_parser.Function, key string, 
 		Type:     consts.MatchType_DomainSet,
 		Not:      f.Not,
 		Upstream: uint8(upstreamId),
+		Rewrite:  rewrite,
 	})
 	return nil
 }
@@ -93,7 +102,7 @@ func (b *RequestMatcherBuilder) addQType(f *config_parser.Function, values []uin
 		if i == len(values)-1 {
 			upstreamName = upstream.Name
 		}
-		upstreamId, err := b.upstreamToId(upstreamName)
+		upstreamId, rewrite, err := b.upstreamToId(upstreamName)
 		if err != nil {
 			return err
 		}
@@ -102,6 +111,7 @@ func (b *RequestMatcherBuilder) addQType(f *config_parser.Function, values []uin
 			Value:    uint16(value),
 			Not:      f.Not,
 			Upstream: uint8(upstreamId),
+			Rewrite:  rewrite,
 		})
 	}
 	return nil
@@ -118,13 +128,14 @@ func (b *RequestMatcherBuilder) addFallback(fallbackOutbound config.FunctionOrSt
 	if upstream.Mark != 0 {
 		return fmt.Errorf("unsupported param: mark")
 	}
-	upstreamId, err := b.upstreamToId(upstream.Name)
+	upstreamId, rewrite, err := b.upstreamToId(upstream.Name)
 	if err != nil {
 		return err
 	}
 	b.rules = append(b.rules, requestMatchSet{
 		Type:     consts.MatchType_Fallback,
 		Upstream: uint8(upstreamId),
+		Rewrite:  rewrite,
 	})
 	return nil
 }
@@ -161,12 +172,13 @@ type requestMatchSet struct {
 	Not      bool
 	Type     consts.MatchType
 	Upstream uint8
+	Rewrite  net.IP
 }
 
 func (m *RequestMatcher) Match(
 	qName string,
 	qType uint16,
-) (upstreamIndex consts.DnsRequestOutboundIndex, err error) {
+) (upstreamIndex consts.DnsRequestOutboundIndex, rewrite *net.IP, err error) {
 	var domainMatchBitmap []uint32
 	if qName != "" {
 		domainMatchBitmap = m.domainMatcher.MatchDomainBitmap(qName)
@@ -190,7 +202,7 @@ func (m *RequestMatcher) Match(
 		case consts.MatchType_Fallback:
 			goodSubrule = true
 		default:
-			return 0, fmt.Errorf("unknown match type: %v", match.Type)
+			return 0, nil, fmt.Errorf("unknown match type: %v", match.Type)
 		}
 	beforeNextLoop:
 		upstream := consts.DnsRequestOutboundIndex(match.Upstream)
@@ -213,10 +225,10 @@ func (m *RequestMatcher) Match(
 			// Tail of a rule (line).
 			// Decide whether to hit.
 			if !badRule {
-				return upstream, nil
+				return upstream, &match.Rewrite, nil
 			}
 			badRule = false
 		}
 	}
-	return 0, fmt.Errorf("no match set hit")
+	return 0, nil, fmt.Errorf("no match set hit")
 }
