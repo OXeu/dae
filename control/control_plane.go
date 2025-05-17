@@ -780,7 +780,7 @@ func (c *ControlPlane) Serve(readyChan chan<- bool, listener *Listener) (err err
 				break
 			}
 			go func(lconn net.Conn) {
-				c.inConnections.Store(lconn, struct{}{})
+				c.inConnections.Store(lconn, ConnectionInfo{})
 				defer c.inConnections.Delete(lconn)
 				if err := c.handleConn(lconn); err != nil {
 					c.log.Warnln("handleConn:", err)

@@ -46,7 +46,7 @@ func (c *ControlPlane) handleConn(lConn net.Conn) (err error) {
 	dst = common.ConvergeAddrPort(dst)
 
 	// Dial and relay.
-	rConn, err := c.RouteDialTcp(&RouteDialParam{
+	rConn, err := c.RouteDialTcp(lConn, &RouteDialParam{
 		Outbound:    consts.OutboundIndex(routingResult.Outbound),
 		Domain:      domain,
 		Mac:         routingResult.Mac,
@@ -88,7 +88,7 @@ type RouteDialParam struct {
 	Mark        uint32
 }
 
-func (c *ControlPlane) RouteDialTcp(p *RouteDialParam) (conn netproxy.Conn, err error) {
+func (c *ControlPlane) RouteDialTcp(lConn net.Conn, p *RouteDialParam) (conn netproxy.Conn, err error) {
 	routingResult := &bpfRoutingResult{
 		Mark:     p.Mark,
 		Must:     0,
@@ -164,6 +164,17 @@ func (c *ControlPlane) RouteDialTcp(p *RouteDialParam) (conn netproxy.Conn, err 
 	}
 	ctx, cancel := context.WithTimeout(context.TODO(), consts.DefaultDialTimeout)
 	defer cancel()
+	c.inConnections.Store(lConn, ConnectionInfo{
+		Src:      src,
+		Dst:      RefineAddrPortToShow(dst),
+		Dialer:   d.Property().Name,
+		Outbound: outbound.Name,
+		Pname:    ProcessName2String(routingResult.Pname[:]),
+		Mac:      Mac2String(routingResult.Mac[:]),
+		L4proto:  "tcp",
+		Sniffed:  domain,
+		Dscp:     routingResult.Dscp,
+	})
 	return d.DialContext(ctx, common.MagicNetwork("tcp", routingResult.Mark, c.mptcp), dialTarget)
 }
 
