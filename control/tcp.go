@@ -173,7 +173,6 @@ func (c *ControlPlane) RouteDialTcp(lConn net.Conn, p *RouteDialParam) (conn net
 		Mac:      Mac2String(routingResult.Mac[:]),
 		L4proto:  "tcp",
 		Sniffed:  domain,
-		Dscp:     routingResult.Dscp,
 	})
 	return d.DialContext(ctx, common.MagicNetwork("tcp", routingResult.Mark, c.mptcp), dialTarget)
 }
