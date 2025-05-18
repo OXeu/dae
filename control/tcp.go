@@ -164,7 +164,7 @@ func (c *ControlPlane) RouteDialTcp(lConn net.Conn, p *RouteDialParam) (conn net
 	}
 	ctx, cancel := context.WithTimeout(context.TODO(), consts.DefaultDialTimeout)
 	defer cancel()
-	c.inConnections.Store(lConn, ConnectionInfo{
+	c.InConnections.Store(lConn, ConnectionInfo{
 		Src:      src,
 		Dst:      RefineAddrPortToShow(dst),
 		Dialer:   d.Property().Name,

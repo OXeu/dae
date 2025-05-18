@@ -54,7 +54,7 @@ type ControlPlane struct {
 
 	// TODO: add mutex?
 	outbounds     []*outbound.DialerGroup
-	inConnections sync.Map
+	InConnections sync.Map
 
 	dnsController    *DnsController
 	onceNetworkReady sync.Once
@@ -780,8 +780,8 @@ func (c *ControlPlane) Serve(readyChan chan<- bool, listener *Listener) (err err
 				break
 			}
 			go func(lconn net.Conn) {
-				c.inConnections.Store(lconn, ConnectionInfo{})
-				defer c.inConnections.Delete(lconn)
+				c.InConnections.Store(lconn, ConnectionInfo{})
+				defer c.InConnections.Delete(lconn)
 				if err := c.handleConn(lconn); err != nil {
 					c.log.Warnln("handleConn:", err)
 				}
@@ -984,7 +984,7 @@ func (c *ControlPlane) chooseBestDnsDialer(
 
 func (c *ControlPlane) AbortConnections() (err error) {
 	var errs []error
-	c.inConnections.Range(func(key, value any) bool {
+	c.InConnections.Range(func(key, value any) bool {
 		if err = key.(net.Conn).Close(); err != nil {
 			errs = append(errs, err)
 		}
